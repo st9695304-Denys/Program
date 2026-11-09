@@ -1,0 +1,278 @@
+using System;
+using System.Collections.Generic;
+
+interface IPayment
+{
+    string Name { get; }
+    void Pay(decimal amount);
+}
+
+class CardPayment : IPayment
+{
+    public string Name { get { return "картка"; } }
+
+    public void Pay(decimal amount)
+    {
+        Console.WriteLine("Оплата карткою: " + amount + " грн");
+    }
+}
+
+class CashPayment : IPayment
+{
+    public string Name { get { return "готівка"; } }
+
+    public void Pay(decimal amount)
+    {
+        Console.WriteLine("Оплата готівкою: " + amount + " грн");
+    }
+}
+
+
+class Order
+{
+    public int Number;
+    public string Description;
+    public decimal Weight;    
+    public decimal Distance; 
+
+    public Transport Transport; 
+    public decimal Cost;
+    public string PaymentName;
+
+    public Order(int number, string description, decimal weight, decimal distance)
+    {
+        Number = number;
+        Description = description;
+        Weight = weight;
+        Distance = distance;
+    }
+
+    public override string ToString()
+    {
+        return "Замовлення №" + Number + " (" + Description + ", " + Weight + " кг, " + Distance + " км)";
+    }
+}
+
+
+abstract class Transport
+{
+    public string Name;
+    public bool IsBusy;
+
+    public Transport(string name)
+    {
+        Name = name;
+        IsBusy = false;
+    }
+
+    public abstract decimal CalculateCost(Order order);
+
+    public virtual bool CanTake(Order order)
+    {
+        return true;
+    }
+}
+
+class Bike : Transport
+{
+    public Bike(string name) : base(name) { }
+
+    public override decimal CalculateCost(Order order)
+    {
+        return 20m + 5m * order.Distance;
+    }
+
+    public override bool CanTake(Order order)
+    {
+        return order.Weight <= 5m && order.Distance <= 10m;
+    }
+}
+
+class Car : Transport
+{
+    public Car(string name) : base(name) { }
+
+    public override decimal CalculateCost(Order order)
+    {
+        return 50m + 8m * order.Distance + 1m * order.Weight;
+    }
+}
+
+class Truck : Transport
+{
+    public Truck(string name) : base(name) { }
+
+    public override decimal CalculateCost(Order order)
+    {
+        return 200m + 15m * order.Distance + 0.5m * order.Weight;
+    }
+}
+
+
+class DeliveryService
+{
+    private List<Transport> transports = new List<Transport>();
+    private List<Order> activeOrders = new List<Order>();
+    private List<Order> history = new List<Order>();
+
+    public void AddTransport(Transport transport)
+    {
+        transports.Add(transport);
+        Console.WriteLine("Створено транспорт: " + transport.Name);
+    }
+
+    public Order CreateOrder(int number, string description, decimal weight, decimal distance)
+    {
+        Order order = new Order(number, description, weight, distance);
+        activeOrders.Add(order);
+        Console.WriteLine("Створено: " + order);
+        return order;
+    }
+
+    public void ShowCosts(Order order)
+    {
+        Console.WriteLine("Вартість для " + order + ":");
+        bool anyone = false;
+        foreach (Transport t in transports)
+        {
+            if (t.CanTake(order))
+            {
+                Console.WriteLine("  " + t.Name + ": " + t.CalculateCost(order) + " грн");
+                anyone = true;
+            }
+        }
+        if (!anyone)
+        {
+            Console.WriteLine("  Жоден транспорт не може взяти це замовлення");
+        }
+    }
+
+    public bool AssignOrder(Order order, Transport transport)
+    {
+        if (order.Transport != null)
+        {
+            Console.WriteLine("Помилка: замовлення №" + order.Number + " вже призначене");
+            return false;
+        }
+        if (transport.IsBusy)
+        {
+            Console.WriteLine("Помилка: " + transport.Name + " зайнятий");
+            return false;
+        }
+        if (!transport.CanTake(order))
+        {
+            Console.WriteLine("Помилка: " + transport.Name + " не може взяти замовлення №" + order.Number);
+            return false;
+        }
+
+        order.Transport = transport;
+        order.Cost = transport.CalculateCost(order);
+        transport.IsBusy = true;
+        Console.WriteLine("Замовлення №" + order.Number + " призначено на " + transport.Name);
+        return true;
+    }
+
+    public bool DeliverOrder(Order order, IPayment payment)
+    {
+        if (order.Transport == null)
+        {
+            Console.WriteLine("Помилка: замовлення №" + order.Number + " ще не призначене на транспорт");
+            return false;
+        }
+
+        payment.Pay(order.Cost);
+        order.PaymentName = payment.Name;
+        order.Transport.IsBusy = false;
+
+        activeOrders.Remove(order);
+        history.Add(order);
+        Console.WriteLine("Замовлення №" + order.Number + " доставлено");
+        return true;
+    }
+
+    public void PrintActive()
+    {
+        Console.WriteLine("--- Активні замовлення ---");
+        if (activeOrders.Count == 0)
+        {
+            Console.WriteLine("Немає");
+        }
+        foreach (Order o in activeOrders)
+        {
+            string status = o.Transport == null ? "не призначено" : "транспорт: " + o.Transport.Name;
+            Console.WriteLine(o + " - " + status);
+        }
+    }
+
+    public void PrintHistory()
+    {
+        Console.WriteLine("--- Історія доставок ---");
+        if (history.Count == 0)
+        {
+            Console.WriteLine("Немає");
+        }
+        foreach (Order o in history)
+        {
+            Console.WriteLine(o + " - " + o.Transport.Name + ", " + o.Cost + " грн, оплата: " + o.PaymentName);
+        }
+    }
+}
+
+
+class Program
+{
+    static void Main()
+    {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        DeliveryService service = new DeliveryService();
+
+
+        Transport bike = new Bike("Велосипед");
+        Transport car = new Car("Автомобіль");
+        Transport truck = new Truck("Вантажівка");
+        service.AddTransport(bike);
+        service.AddTransport(car);
+        service.AddTransport(truck);
+
+        Order o1 = service.CreateOrder(1, "Піца", 2, 5);          
+        Order o2 = service.CreateOrder(2, "Шафа", 50, 8);      
+        Order o3 = service.CreateOrder(3, "Документи", 1, 15);    
+        Order o4 = service.CreateOrder(4, "Посилка", 3, 4);
+
+
+        Console.WriteLine();
+        service.ShowCosts(o1);
+        service.ShowCosts(o2);
+        service.ShowCosts(o3);
+
+  
+        Console.WriteLine();
+        service.AssignOrder(o1, bike); 
+        service.AssignOrder(o4, bike);   
+        service.AssignOrder(o2, bike);   
+        service.AssignOrder(o3, car);  
+        service.AssignOrder(o1, truck); 
+
+       
+        Console.WriteLine();
+        service.DeliverOrder(o2, new CashPayment());
+
+       
+        Console.WriteLine();
+        service.PrintActive();
+
+       
+        Console.WriteLine();
+        service.DeliverOrder(o1, new CardPayment()); 
+        service.DeliverOrder(o3, new CashPayment());  
+
+        
+        Console.WriteLine();
+        service.AssignOrder(o4, bike);
+        service.AssignOrder(o2, truck);   
+
+        Console.WriteLine();
+        service.PrintActive();
+        service.PrintHistory();
+    }
+}
